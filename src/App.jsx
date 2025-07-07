@@ -1,10 +1,9 @@
-import { useState } from "react";
-
 import "./App.css";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./components/login";
 import Register from "./components/register";
 import VerifyEmail from "./components/verifyEmail";
+import Home from "./pages/home";
 
 function App() {
   return (
@@ -15,6 +14,7 @@ function App() {
           <Route path='/register' element={<Register />} />
           <Route path='/login' element={<Login />} />
           <Route path='/user/verifyEmail' element={<VerifyEmail />} />
+          <Route path='/home' element={<Home />} />
         </Routes>
       </div>
     </Router>

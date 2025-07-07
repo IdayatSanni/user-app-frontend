@@ -5,9 +5,6 @@ import { useParams, useNavigate } from "react-router-dom";
 function setToken(token) {
   localStorage.setItem("authToken", token);
 }
-// function removeToken() {
-//   localStorage.removeItem('authToken');
-// }
 
 const Login = () => {
   // -------------------- Hooks and State --------------------
@@ -31,19 +28,26 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      // Send login request to backend
+      console.log("Attempting login with:", user);
       const response = await axios.post(
         "http://localhost:8080/api/user/login",
         user
       );
-      // If token is returned, store in localStorage
-      if (response.data && response.data.token) {
-        setToken(response.data.token);
+      // The JWT is in the headers, e.g. 'jwt-token' or similar
+      const token =
+        response.headers["jwt-token"] || response.headers["authorization"];
+      if (token) {
+        setToken(token);
+        console.log("Token set from header, navigating to /home");
+        navigate("/home");
+      } else {
+        console.warn("No token received in headers:", response.headers);
       }
-      // Redirect to home page
-      navigate("/");
     } catch (error) {
       console.error("Error Login user:", error);
+      if (error.response) {
+        console.error("Backend error response:", error.response.data);
+      }
     }
   };
 
@@ -57,6 +61,7 @@ const Login = () => {
       <h2 className='text-3xl font-bold mb-8 text-gray-800 text-center tracking-tight flex items-center justify-center gap-2'>
         Login
       </h2>
+
       {/* Login Form */}
       <form onSubmit={handleLogin} className='space-y-7'>
         {/* Username Field */}

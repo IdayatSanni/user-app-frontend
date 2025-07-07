@@ -127,7 +127,7 @@ const Register = () => {
             onChange={handleChange}
             className='w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white placeholder:text-gray-400 transition'
             required
-            placeholder='Enter username here'
+            placeholder='Enter phonenumber here'
           />
         </div>
         <div>
