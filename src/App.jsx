@@ -4,8 +4,6 @@ import "./App.css";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 function App() {
-  const [count, setCount] = useState(0);
-
   return (
     <Router>
       <div className='max-w-4xl mx-auto p-4'>
