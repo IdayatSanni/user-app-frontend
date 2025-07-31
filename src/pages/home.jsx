@@ -25,6 +25,30 @@ function fileToBase64(file) {
   });
 }
 
+// Modal component for confirmation
+const ConfirmModal = ({ open, onClose, onConfirm, message }) => {
+  if (!open) return null;
+  return (
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40'>
+      <div className='bg-white rounded-lg shadow-lg p-6 w-full max-w-xs text-center'>
+        <p className='mb-6 text-gray-800'>{message}</p>
+        <div className='flex justify-center gap-4'>
+          <button
+            onClick={onConfirm}
+            className='bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded font-semibold'>
+            Yes, Delete
+          </button>
+          <button
+            onClick={onClose}
+            className='bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded font-semibold'>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Home = () => {
   // State for user info, post content, and feeds
   const [user, setUser] = useState({});
@@ -33,6 +57,16 @@ const Home = () => {
   const [likedPosts, setLikedPosts] = useState({});
   const [commentInputs, setCommentInputs] = useState({}); // { postId: commentText }
   const [imageFile, setImageFile] = useState(null); // For image upload
+  const [comments, setComments] = useState({}); // { postId: [comments] }
+  const [showComments, setShowComments] = useState({}); // { postId: boolean }
+  const [commentCounts, setCommentCounts] = useState({}); // { postId: count }
+  const [modal, setModal] = useState({
+    open: false,
+    type: "", // 'post' or 'comment'
+    id: null, // postId or commentId
+    postId: null, // for comment deletion
+  });
+  const [likedComments, setLikedComments] = useState({}); // { [commentId]: true/false }
 
   // Handle like
   const handleLike = async (postId) => {
@@ -61,6 +95,136 @@ const Home = () => {
       fetchPosts(); // Refresh posts to update like count
     } catch (err) {
       console.error("Error liking/unliking post:", err);
+    }
+  };
+
+  // Fetch comments for a specific post
+  const fetchComments = async (postId) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await axios.get(
+        `http://localhost:8080/api/comments/post/${postId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setComments((prev) => ({ ...prev, [postId]: res.data }));
+    } catch (err) {
+      console.error("Error fetching comments:", err);
+      setComments((prev) => ({ ...prev, [postId]: [] }));
+    }
+  };
+
+  // Fetch comment count for a specific post
+  const fetchCommentCount = async (postId) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      const res = await axios.get(
+        `http://localhost:8080/api/comments/post/${postId}/count`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      setCommentCounts((prev) => ({ ...prev, [postId]: res.data }));
+    } catch (err) {
+      console.error("Error fetching comment count:", err);
+      setCommentCounts((prev) => ({ ...prev, [postId]: 0 }));
+    }
+  };
+
+  // Toggle comment section visibility
+  const toggleComments = async (postId) => {
+    const isCurrentlyShowing = showComments[postId];
+    setShowComments((prev) => ({ ...prev, [postId]: !isCurrentlyShowing }));
+
+    // If showing comments and we haven't fetched them yet, fetch them
+    if (!isCurrentlyShowing && !comments[postId]) {
+      await fetchComments(postId);
+    }
+  };
+
+  // Handle comment submission
+  const handleCommentSubmit = async (postId, e) => {
+    e.preventDefault();
+    const commentText = commentInputs[postId];
+
+    if (!commentText || !commentText.trim()) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("authToken");
+      const commentObj = {
+        postId: parseInt(postId),
+        userId: user.userId ? parseInt(user.userId) : undefined,
+        content: commentText.trim(),
+        likesCount: 0,
+      };
+
+      await axios.post("http://localhost:8080/api/comments", commentObj, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      // Clear the input
+      setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
+
+      // Refresh comments for this post
+      await fetchComments(postId);
+      await fetchCommentCount(postId);
+    } catch (err) {
+      console.error("Error creating comment:", err);
+      alert("Error posting comment. Please try again.");
+    }
+  };
+
+  // Handle comment deletion
+  const handleDeleteComment = async (commentId, postId) => {
+    try {
+      const token = localStorage.getItem("authToken");
+      await axios.delete(`http://localhost:8080/api/comments/${commentId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      // Refresh comments for this post
+      await fetchComments(postId);
+      await fetchCommentCount(postId);
+    } catch (err) {
+      console.error("Error deleting comment:", err);
+      alert("Error deleting comment. Please try again.");
+    }
+  };
+
+  // Handle comment like/unlike
+  const handleCommentLike = async (commentId, postId) => {
+    const alreadyLiked = likedComments[commentId];
+    const token = localStorage.getItem("authToken");
+    try {
+      if (!alreadyLiked) {
+        await axios.post(
+          `http://localhost:8080/api/comments/${commentId}/like`,
+          {},
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setLikedComments((prev) => ({ ...prev, [commentId]: true }));
+      } else {
+        await axios.post(
+          `http://localhost:8080/api/comments/${commentId}/unlike`,
+          {},
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+        setLikedComments((prev) => ({ ...prev, [commentId]: false }));
+      }
+      // Refresh comments for this post to update like count
+      await fetchComments(postId);
+    } catch (err) {
+      console.error("Error liking/unliking comment:", err);
     }
   };
 
@@ -95,6 +259,7 @@ const Home = () => {
         />
       </svg>
     );
+
   const CommentIcon = () => (
     <svg
       xmlns='http://www.w3.org/2000/svg'
@@ -116,15 +281,6 @@ const Home = () => {
     setCommentInputs((prev) => ({ ...prev, [postId]: value }));
   };
 
-  // Handle comment submit (frontend only, for demo)
-  const handleCommentSubmit = (postId, e) => {
-    e.preventDefault();
-    // For demo, just clear the input
-    setCommentInputs((prev) => ({ ...prev, [postId]: "" }));
-    // In a real app, send comment to backend here
-    alert("Comment submitted: " + commentInputs[postId]);
-  };
-
   // Fetch user info from token and all posts from backend on mount
   useEffect(() => {
     // Fetch user info from token and then get userId from backend
@@ -136,6 +292,13 @@ const Home = () => {
     }
     fetchPosts();
   }, []);
+
+  // Fetch comment counts when feeds change
+  useEffect(() => {
+    feeds.forEach((feed) => {
+      fetchCommentCount(feed.postId);
+    });
+  }, [feeds]);
 
   // Fetch userId from backend using username or email
   const fetchUserId = async (username) => {
@@ -224,13 +387,64 @@ const Home = () => {
     }
   };
 
+  // Format date for display
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  // Show modal before deleting post
+  const confirmDeletePost = (postId) => {
+    setModal({
+      open: true,
+      type: "post",
+      id: postId,
+      postId: null,
+    });
+  };
+
+  // Show modal before deleting comment
+  const confirmDeleteComment = (commentId, postId) => {
+    setModal({
+      open: true,
+      type: "comment",
+      id: commentId,
+      postId: postId,
+    });
+  };
+
+  // Handle modal confirmation
+  const handleModalConfirm = async () => {
+    if (modal.type === "post") {
+      await handleDelete(modal.id);
+    } else if (modal.type === "comment") {
+      await handleDeleteComment(modal.id, modal.postId);
+    }
+    setModal({ open: false, type: "", id: null, postId: null });
+  };
+
+  // Handle modal close
+  const handleModalClose = () => {
+    setModal({ open: false, type: "", id: null, postId: null });
+  };
+
   return (
     <>
       <Navbar />
+      {/* Confirm Modal */}
+      <ConfirmModal
+        open={modal.open}
+        onClose={handleModalClose}
+        onConfirm={handleModalConfirm}
+        message={
+          modal.type === "post"
+            ? "Are you sure you want to delete this post? This action cannot be undone."
+            : "Are you sure you want to delete this comment? This action cannot be undone."
+        }
+      />
       <div className='max-w-2xl mx-auto mt-10 relative'>
         {/* Welcome message */}
         <h1 className='text-3xl font-bold mb-4 text-indigo-700'>
-          Welcome {user.sub || user.username || ""}!
+          Welcome {user.sub || user.user_name || ""}!
         </h1>
         {/* Post form */}
         <form onSubmit={handlePost} className='mb-6'>
@@ -259,6 +473,7 @@ const Home = () => {
             Post
           </button>
         </form>
+
         {/* Feeds section */}
         <div>
           <h2 className='text-xl font-semibold mb-2 text-gray-800'>Feeds</h2>
@@ -292,19 +507,24 @@ const Home = () => {
                     <LikeIcon filled={!!likedPosts[feed.postId]} />
                     <span className='text-sm'>{feed.likesCount || 0}</span>
                   </button>
-                  {/* Comment icon */}
-                  <span className='flex items-center gap-1 text-indigo-500'>
+                  {/* Comment button */}
+                  <button
+                    onClick={() => toggleComments(feed.postId)}
+                    className='flex items-center gap-1 text-indigo-500 hover:text-indigo-600 focus:outline-none'>
                     <CommentIcon />
-                    <span className='text-sm'>Comment</span>
-                  </span>
+                    <span className='text-sm'>
+                      {commentCounts[feed.postId] || 0} Comments
+                    </span>
+                  </button>
                 </div>
+
                 {/* Comment input */}
                 <form
                   onSubmit={(e) => handleCommentSubmit(feed.postId, e)}
-                  className='mt-2 flex gap-2'>
+                  className='mt-3 flex gap-2'>
                   <input
                     type='text'
-                    className='flex-1 border border-gray-300 rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
+                    className='flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400'
                     placeholder='Write a comment...'
                     value={commentInputs[feed.postId] || ""}
                     onChange={(e) =>
@@ -313,16 +533,93 @@ const Home = () => {
                   />
                   <button
                     type='submit'
-                    className='bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1 rounded-lg text-sm font-semibold'>
+                    className='bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors'>
                     Post
                   </button>
                 </form>
+
+                {/* Comments section */}
+                {showComments[feed.postId] && (
+                  <div className='mt-4 border-t border-gray-200 pt-3'>
+                    <div className='space-y-3'>
+                      {comments[feed.postId] &&
+                      comments[feed.postId].length > 0 ? (
+                        comments[feed.postId].map((comment) => (
+                          <div
+                            key={comment.commentId}
+                            className='bg-gray-50 p-3 rounded-lg'>
+                            <div className='flex justify-between items-start'>
+                              <div className='flex-1'>
+                                <div className='flex items-center gap-2'>
+                                  <span className='font-semibold text-indigo-600 text-sm'>
+                                    User {comment.userId}
+                                  </span>
+                                  <span className='text-xs text-gray-500'>
+                                    {formatDate(comment.createdAt)}
+                                  </span>
+                                </div>
+                                <p className='text-gray-700 text-sm mt-1'>
+                                  {comment.content}
+                                </p>
+                                <div className='flex items-center gap-3 mt-2'>
+                                  <button
+                                    onClick={() =>
+                                      handleCommentLike(
+                                        comment.commentId,
+                                        feed.postId
+                                      )
+                                    }
+                                    className={`flex items-center gap-1 ${
+                                      likedComments[comment.commentId]
+                                        ? "text-red-600"
+                                        : "text-red-500"
+                                    } hover:text-red-600 text-xs`}
+                                    title={
+                                      likedComments[comment.commentId]
+                                        ? "Unlike"
+                                        : "Like"
+                                    }>
+                                    <LikeIcon
+                                      filled={
+                                        !!likedComments[comment.commentId]
+                                      }
+                                    />
+                                    <span>{comment.likesCount || 0}</span>
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Delete button for comment owner */}
+                              {(user.userId === comment.userId ||
+                                user.id === comment.userId ||
+                                user.user_id === comment.userId) && (
+                                <button
+                                  onClick={() =>
+                                    confirmDeleteComment(
+                                      comment.commentId,
+                                      feed.postId
+                                    )
+                                  }
+                                  className='text-red-500 hover:text-red-600 text-xs ml-2'>
+                                  Delete
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className='text-gray-500 text-sm text-center py-2'>
+                          No comments yet. Be the first to comment!
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Show delete button only for posts by current user */}
-                {(user.userId === feed.userId ||
-                  user.id === feed.userId ||
-                  user.user_id === feed.userId) && (
+                {(user.userId === post.userId ||
+                  user.user_id === post.userId) && (
                   <button
-                    onClick={() => handleDelete(feed.postId)}
+                    onClick={() => confirmDeletePost(feed.postId)}
                     className='absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs'>
                     Delete
                   </button>
